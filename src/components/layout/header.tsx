@@ -12,17 +12,15 @@ export function Header({ onMenuClick }: HeaderProps) {
     <header className="sticky top-0 z-50 w-full border-b bg-gradient-to-r from-blue-600 via-purple-600 to-blue-800 dark:from-blue-800 dark:via-purple-800 dark:to-blue-900 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-16 items-center justify-between px-4">
         <div className="flex items-center gap-4">
-       
-          
-          <div className="flex items-center gap-3">
-               <Button
+          <Button
             variant="ghost"
-            size="md"
-            {/* className="lg:hidden text-white hover:bg-white/20" */}
+            size="icon"
             onClick={onMenuClick}
           >
             <Menu className="h-5 w-5" />
           </Button>
+          
+          <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/20 backdrop-blur">
               <FileText className="h-5 w-5 text-white" />
             </div>
