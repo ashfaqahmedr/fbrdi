@@ -67,7 +67,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
       <aside className={cn(
         "fixed left-0 top-16 z-50 h-[calc(100vh-4rem)] w-64 transform border-r bg-background transition-transform duration-300 ease-in-out",
         open ? "translate-x-0" : "-translate-x-full",
-        "lg:translate-x-0" // Always visible on large screens
+        "-translate-x-full" // Always visible on large screens
       )}>
         <div className="flex h-full flex-col">
           {/* Close button for mobile */}
