@@ -20,7 +20,7 @@ export function Layout({ children }: LayoutProps) {
           "lg:ml-64", // Always show sidebar on large screens
           sidebarOpen ? "ml-64" : "ml-0" // Toggle on smaller screens
         )}>
-          <div className="container mx-auto p-6">
+          <div className="w-full max-w-7xl mx-auto p-6">
             {children}
           </div>
         </main>
