@@ -14,7 +14,7 @@ export function Header({ onMenuClick }: HeaderProps) {
         <div className="flex items-center gap-4">
           <Button
             variant="ghost"
-            size="lg"
+            size="sm"
             onClick={onMenuClick}
           >
             <Menu className="h-5 w-5" />
