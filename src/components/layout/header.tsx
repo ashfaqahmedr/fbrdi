@@ -14,7 +14,7 @@ export function Header({ onMenuClick }: HeaderProps) {
         <div className="flex items-center gap-4">
           <Button
             variant="ghost"
-            size="icon"
+            size="md"
             className="lg:hidden text-white hover:bg-white/20"
             onClick={onMenuClick}
           >
