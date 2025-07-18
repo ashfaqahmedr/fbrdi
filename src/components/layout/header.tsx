@@ -17,7 +17,7 @@ export function Header({ onMenuClick }: HeaderProps) {
             size="sm"
             onClick={onMenuClick}
           >
-            <Menu className="h-5 w-5" />
+            <Menu className="h-5 w-5 text-primary" />
           </Button>
           
           <div className="flex items-center gap-3">
