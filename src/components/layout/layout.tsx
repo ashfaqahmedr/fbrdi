@@ -16,7 +16,7 @@ export function Layout({ children }: LayoutProps) {
       <div className="flex">
         <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
         <main className={cn(
-          "flex-1 transition-all duration-300",
+          "w-full max-w-7xl mx-auto flex-1 transition-all duration-300 ",
           "lg:ml-64", // Always show sidebar on large screens
           sidebarOpen ? "ml-64" : "ml-0" // Toggle on smaller screens
         )}>
