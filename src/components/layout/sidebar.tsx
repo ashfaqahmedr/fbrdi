@@ -62,7 +62,7 @@ export function Sidebar({ open, collapsed, onClose, onCollapse, className = '' }
   return (
     
     <>
-    </TooltipProvider>
+    <TooltipProvider />
       {/* Mobile overlay */}
       {open && (
         <div 
