@@ -60,6 +60,7 @@ export function Sidebar({ open, collapsed, onClose, onCollapse, className = '' }
   const location = useLocation();
 
   return (
+    
     <TooltipProvider>
     <>
       {/* Mobile overlay */}
@@ -181,7 +182,7 @@ export function Sidebar({ open, collapsed, onClose, onCollapse, className = '' }
           </div>
         </div>
       </aside>
-    </TooltipProvider>
+ 
     </>
   );
 }
