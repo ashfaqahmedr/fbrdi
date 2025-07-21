@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { SearchableSelect } from '@/components/ui/searchable-select';
-import { Plus, Trash2, Package, Loader2 } from 'lucide-react';
+import { Trash2, Package, Loader2 } from 'lucide-react';
 import { useInvoice } from '@/contexts/invoice-context';
 import { useAPI } from '@/contexts/api-context';
 import { useDatabase } from '@/hooks/use-database';
@@ -23,11 +23,11 @@ interface InvoiceItemsProps {
 }
 
 export function InvoiceItems({ selectedSeller, selectedBuyer, invoiceDate, currency }: InvoiceItemsProps) {
-  const { items, addItem, updateItem, removeItem, getTotalAmount, getGrossAmount, getSalesTax } = useInvoice();
+  const { items, updateItem, removeItem, getTotalAmount, getGrossAmount, getSalesTax } = useInvoice();
   const { hsCodes, transactionTypes, provinces } = useAPI();
   const { sellers, buyers } = useDatabase();
   const [isLoading, setIsLoading] = useState(false);
-  const [itemCounter] = useState(0); // Kept for compatibility but not used
+  const lastItemRef = useRef<HTMLDivElement>(null);
 
   const seller = useMemo(() => 
     sellers.find(s => s.id === selectedSeller), 
@@ -52,90 +52,6 @@ export function InvoiceItems({ selectedSeller, selectedBuyer, invoiceDate, curre
     }
   }, [updateTimeouts]);
 
-
-  const addNewItem = useCallback(async () => {
-    if (isLoading) return;
-    
-    setIsLoading(true);
-    const itemId = `item-${Date.now()}-${Math.floor(Math.random() * 1000)}`; // More unique ID generation
-    
-    try {
-      const defaultHsCode = hsCodes.length > 0 ? hsCodes[0] : { hS_CODE: "5904.9000", description: "TEXTILE PRODUCTS" };
-      const defaultTransType = transactionTypes.length > 0 ? transactionTypes[0] : { transactioN_TYPE_ID: 18, transactioN_DESC: "Services" };
-
-      // Create a basic item first to show in the UI immediately
-      const newItem: InvoiceItem = {
-        id: itemId,
-        hsCode: defaultHsCode.hS_CODE,
-        description: defaultHsCode.description,
-        serviceTypeId: defaultTransType.transactioN_TYPE_ID,
-        saleType: defaultTransType.transactioN_DESC,
-        uom: "PCS", // Default UoM
-        quantity: 1,
-        unitPrice: 0, // Start with 0 to avoid validation issues
-        taxRate: 0,
-        rateId: undefined,
-        sroSchedule: undefined,
-        sroItem: undefined,
-        annexureId: 3,
-        uomOptions: ["PCS", "KG", "MTR", "SET", "LTR"], // Common defaults
-        taxRateOptions: [],
-        sroScheduleOptions: [],
-        sroItemOptions: [],
-      };
-
-      // Add the item immediately for better UX
-      addItem(newItem);
-      
-      // Then fetch additional data in the background
-      if (seller && newItem.hsCode) {
-        try {
-          apiService.setToken(seller.sandboxToken);
-          
-          // Fetch UoM options
-          const uomOptions = await apiService.fetchUoMOptions(newItem.hsCode, 3);
-          const uom = uomOptions.length > 0 ? uomOptions[0] : "PCS";
-          
-          // Update the item with fetched data
-          updateItem(itemId, { 
-            uomOptions,
-            uom,
-            taxRateOptions: [],
-            sroScheduleOptions: [],
-            sroItemOptions: []
-          });
-          
-          // If we have a buyer and invoice date, try to load tax rates
-          if (buyer && invoiceDate) {
-            const formattedDate = apiService.formatDateForAPI(invoiceDate, "DD-MMM-YYYY");
-            const buyerProvince = provinces.find(p => p.stateProvinceDesc === buyer.province);
-            const originationSupplier = buyerProvince ? buyerProvince.stateProvinceCode : 1;
-            
-            const taxRateOptions = await apiService.fetchTaxRateOptions(
-              newItem.serviceTypeId, 
-              originationSupplier.toString(), 
-              formattedDate
-            );
-            
-            updateItem(itemId, { taxRateOptions });
-          }
-          
-          toast.success('Item added successfully');
-        } catch (error) {
-          console.error('Error fetching item details:', error);
-          // Keep the item but show a warning
-          toast.warning('Item added, but some details could not be loaded');
-        }
-      } else {
-        toast.success('Item added successfully');
-      }
-    } catch (error) {
-      console.error('Error adding item:', error);
-      toast.error('Failed to add item');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [itemCounter, hsCodes, transactionTypes, seller, addItem, isLoading]);
 
   const handleItemUpdate = useCallback(async (itemId: string, field: string, value: any) => {
     const item = items.find(item => item.id === itemId);
@@ -169,13 +85,7 @@ export function InvoiceItems({ selectedSeller, selectedBuyer, invoiceDate, curre
           }
           updates.uomOptions = await apiService.fetchUoMOptions(value, 3);
           updates.uom = updates.uomOptions.length > 0 ? updates.uomOptions[0] : "";
-          updates.taxRateOptions = [];
-          updates.sroScheduleOptions = [];
-          updates.sroItemOptions = [];
-          updates.taxRate = 0;
-          updates.rateId = undefined;
-          updates.sroSchedule = undefined;
-          updates.sroItem = undefined;
+          // Don't reset tax rates for HS code changes
           toast.success('HS Code updated, UoM options refreshed');
         } 
         else if (field === 'serviceTypeId') {
@@ -264,11 +174,6 @@ export function InvoiceItems({ selectedSeller, selectedBuyer, invoiceDate, curre
   setUpdateTimeouts(prev => ({ ...prev, [updateKey]: timeoutId }));
 }, [items, seller, buyer, invoiceDate, hsCodes, transactionTypes, provinces, updateItem, clearUpdateTimeout, setUpdateTimeouts]);
 
-useEffect(() => {
-  if (items.length === 0 && hsCodes.length > 0 && transactionTypes.length > 0 && !isLoading) {
-    addNewItem();
-  }
-}, [hsCodes.length, transactionTypes.length]);
 
 useEffect(() => {
   return () => {
@@ -276,6 +181,15 @@ useEffect(() => {
   };
 }, [updateTimeouts]);
 
+// Focus on last item when items change
+useEffect(() => {
+  if (items.length > 0 && lastItemRef.current) {
+    const input = lastItemRef.current.querySelector('input, button, select');
+    if (input) {
+      (input as HTMLElement).focus();
+    }
+  }
+}, [items.length]);
 // Prepare options for searchable selects
 const hsCodeOptions = useMemo(() => 
   hsCodes.map(hs => ({
@@ -296,25 +210,10 @@ const transactionTypeOptions = useMemo(() =>
 return (
   <Card className="border-l-4 border-l-blue-500 shadow-lg">
     <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950 dark:to-indigo-950">
-      <div className="flex items-center justify-between">
         <CardTitle className="flex items-center gap-2 text-blue-700 dark:text-blue-300">
           <Package className="h-5 w-5" />
           Invoice Items
         </CardTitle>
-        <Button 
-          onClick={addNewItem} 
-          size="sm" 
-          className="bg-green-600 hover:bg-green-700 text-white shadow-md hover:shadow-lg transition-all duration-200"
-          disabled={isLoading}
-        >
-          {isLoading ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          ) : (
-            <Plus className="h-4 w-4 mr-2" />
-          )}
-          {isLoading ? 'Adding...' : 'Add Item'}
-        </Button>
-      </div>
     </CardHeader>
     
     <CardContent className="p-6">
@@ -322,13 +221,16 @@ return (
         <div className="text-center py-8 text-muted-foreground">
           <Package className="h-12 w-12 mx-auto mb-4 opacity-50" />
           <p>No items added yet</p>
-          <p className="text-sm">Click "Add Item" to get started</p>
+          <p className="text-sm">Use the "Add New Item" button below to get started</p>
         </div>
       ) : (
         <div className="space-y-6">
           {items.map((item, index) => (
-            <ItemRow
+            <div 
               key={item.id}
+              ref={index === items.length - 1 ? lastItemRef : null}
+            >
+            <ItemRow
               item={item}
               index={index}
               currency={currency}
@@ -337,6 +239,7 @@ return (
               onUpdate={handleItemUpdate}
               onRemove={() => removeItem(item.id)}
             />
+            </div>
           ))}
           
           <Separator className="my-6" />
@@ -418,7 +321,7 @@ function ItemRow({ item, index, currency, hsCodeOptions, transactionTypeOptions,
   );
 
   return (
-    <div className="border rounded-lg p-4 space-y-4 bg-gradient-to-r from-gray-50 to-blue-50 dark:from-gray-900 dark:to-blue-900 shadow-sm">
+    <div className="border rounded-lg p-3 space-y-3 bg-gradient-to-r from-gray-50 to-blue-50 dark:from-gray-900 dark:to-blue-900 shadow-sm">
       <div className="flex items-center justify-between">
         <h4 className="font-medium text-blue-700 dark:text-blue-300">Item {index + 1}</h4>
         <Button
@@ -431,7 +334,7 @@ function ItemRow({ item, index, currency, hsCodeOptions, transactionTypeOptions,
         </Button>
       </div>
       
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         <div className="space-y-2">
           <Label className="text-purple-700 dark:text-purple-300">HS Code</Label>
           <SearchableSelect
@@ -466,6 +369,15 @@ function ItemRow({ item, index, currency, hsCodeOptions, transactionTypeOptions,
             min="0.01"
           />
         </div>
+        
+        <div className="space-y-2">
+          <Label className="text-cyan-700 dark:text-cyan-300">Total Value</Label>
+          <Input
+            value={`${currency} ${totalValue.toFixed(2)}`}
+            readOnly
+            className="bg-cyan-50 border-cyan-200 dark:bg-cyan-950 font-medium"
+          />
+        </div>
       </div>
       
       <div className="space-y-2">
@@ -473,12 +385,12 @@ function ItemRow({ item, index, currency, hsCodeOptions, transactionTypeOptions,
         <Textarea
           value={item.description}
           onChange={(e) => onUpdate(item.id, 'description', e.target.value)}
-          rows={2}
+          rows={1}
           className="border-indigo-200 focus:border-indigo-500"
         />
       </div>
       
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div className="space-y-2">
           <Label className="text-pink-700 dark:text-pink-300">Service Type</Label>
           <SearchableSelect
@@ -512,21 +424,12 @@ function ItemRow({ item, index, currency, hsCodeOptions, transactionTypeOptions,
             className="border-red-200 focus:border-red-500"
           />
         </div>
-        
-        <div className="space-y-2">
-          <Label className="text-cyan-700 dark:text-cyan-300">Total Value</Label>
-          <Input
-            value={`${currency} ${totalValue.toFixed(2)}`}
-            readOnly
-            className="bg-cyan-50 border-cyan-200 dark:bg-cyan-950 font-medium"
-          />
-        </div>
       </div>
       
-      <div className="bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-yellow-950 dark:to-amber-950 p-4 rounded-lg border border-yellow-200 dark:border-yellow-800">
+      <div className="bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-yellow-950 dark:to-amber-950 p-3 rounded-lg border border-yellow-200 dark:border-yellow-800">
         <h5 className="font-medium text-yellow-800 dark:text-yellow-200 mb-3">SRO Details</h5>
         
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div className="space-y-2">
             <Label className="text-yellow-700 dark:text-yellow-300">SRO Schedule</Label>
             <SearchableSelect
@@ -537,9 +440,6 @@ function ItemRow({ item, index, currency, hsCodeOptions, transactionTypeOptions,
               disabled={!item.rateId || !item.sroScheduleOptions || item.sroScheduleOptions.length === 0}
               className="border-yellow-200 focus:border-yellow-500"
             />
-            <p className="text-xs text-yellow-600 dark:text-yellow-400">
-              {!item.rateId ? "Select tax rate first" : "SRO Schedule"}
-            </p>
           </div>
           
           <div className="space-y-2">
@@ -552,9 +452,6 @@ function ItemRow({ item, index, currency, hsCodeOptions, transactionTypeOptions,
               disabled={!item.sroSchedule || !item.sroItemOptions || item.sroItemOptions.length === 0}
               className="border-amber-200 focus:border-amber-500"
             />
-            <p className="text-xs text-amber-600 dark:text-amber-400">
-              {!item.sroSchedule ? "Select SRO schedule first" : "SRO Item Serial"}
-            </p>
           </div>
           
           <div className="space-y-2">
@@ -565,9 +462,6 @@ function ItemRow({ item, index, currency, hsCodeOptions, transactionTypeOptions,
               readOnly
               className="bg-orange-50 border-orange-200 dark:bg-orange-950"
             />
-            <p className="text-xs text-orange-600 dark:text-orange-400">
-              Rate ID: {item.rateId || "Not selected"}
-            </p>
           </div>
         </div>
       </div>

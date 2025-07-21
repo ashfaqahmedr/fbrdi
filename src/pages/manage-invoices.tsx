@@ -1,25 +1,34 @@
 import { useState, useMemo } from 'react';
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
-import { FileText, Eye, Edit, Download, Trash2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { FileText, Eye, Edit, Download, Trash2, Printer, FileDown } from 'lucide-react';
 import { useDatabase } from '@/hooks/use-database';
 import { Invoice } from '@/lib/database';
-// import { InvoiceViewer } from '@/components/invoice-viewer';
 import { UniversalTableLayout } from '@/components/ui/universal-table-layout';
 import { InvoiceViewer } from '@/components/invoice/invoice-viewer';
 import { Column } from '@/components/ui/data-table';
+import { toast } from 'sonner';
+import * as XLSX from 'xlsx';
 
 export function ManageInvoices() {
   const { invoices, sellers, buyers, deleteInvoice } = useDatabase();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState('all');
+  const [dateRangeStart, setDateRangeStart] = useState('');
+  const [dateRangeEnd, setDateRangeEnd] = useState('');
   const [registrationTypeFilter, setRegistrationTypeFilter] = useState('all');
   const [registrationStatusFilter, setRegistrationStatusFilter] = useState('all');
   const [activityFilter, setActivityFilter] = useState('all');
   const [isInfiniteScroll, setIsInfiniteScroll] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [viewerOpen, setViewerOpen] = useState(false);
+  const [downloadDialogOpen, setDownloadDialogOpen] = useState(false);
+  const [downloadFormat, setDownloadFormat] = useState<'pdf' | 'excel' | 'json'>('pdf');
 
   // Get unique values for filter options from sellers data
   const registrationTypes = useMemo(() => {
@@ -37,6 +46,19 @@ export function ManageInvoices() {
     return activities.sort();
   }, [sellers]);
 
+  // Filter invoices with date range
+  const filteredInvoices = useMemo(() => {
+    return invoices.filter(invoice => {
+      // Date range filter
+      if (dateRangeStart && dateRangeEnd) {
+        const invoiceDate = new Date(invoice.invoiceDate);
+        const startDate = new Date(dateRangeStart);
+        const endDate = new Date(dateRangeEnd);
+        return invoiceDate >= startDate && invoiceDate <= endDate;
+      }
+      return true;
+    });
+  }, [invoices, dateRangeStart, dateRangeEnd]);
   const handleViewInvoice = (invoice: Invoice) => {
     setSelectedInvoice(invoice);
     setViewerOpen(true);
@@ -48,8 +70,44 @@ export function ManageInvoices() {
   };
 
   const handleDownloadInvoice = (invoice: Invoice) => {
-    // Placeholder for download functionality
-    console.log('Download invoice:', invoice.id);
+    setSelectedInvoice(invoice);
+    setDownloadDialogOpen(true);
+  };
+
+  const handlePrintInvoice = (invoice: Invoice) => {
+    setSelectedInvoice(invoice);
+    setViewerOpen(true);
+    // Print functionality will be handled in the viewer
+  };
+
+  const executeDownload = () => {
+    if (!selectedInvoice) return;
+
+    switch (downloadFormat) {
+      case 'pdf':
+        // PDF download logic
+        toast.info('PDF download functionality will be implemented');
+        break;
+      case 'excel':
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.json_to_sheet([selectedInvoice]);
+        XLSX.utils.book_append_sheet(wb, ws, 'Invoice');
+        XLSX.writeFile(wb, `invoice-${selectedInvoice.invoiceRefNo}.xlsx`);
+        toast.success('Excel file downloaded successfully');
+        break;
+      case 'json':
+        const dataStr = JSON.stringify(selectedInvoice, null, 2);
+        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(dataBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `invoice-${selectedInvoice.invoiceRefNo}.json`;
+        link.click();
+        URL.revokeObjectURL(url);
+        toast.success('JSON file downloaded successfully');
+        break;
+    }
+    setDownloadDialogOpen(false);
   };
 
   const handleDelete = (id: string, status: string) => {
@@ -69,7 +127,7 @@ export function ManageInvoices() {
   };
 
   const handleExport = () => {
-    const dataStr = JSON.stringify(invoices, null, 2);
+    const dataStr = JSON.stringify(filteredInvoices, null, 2);
     const dataBlob = new Blob([dataStr], { type: 'application/json' });
     const url = URL.createObjectURL(dataBlob);
     const link = document.createElement('a');
@@ -77,6 +135,7 @@ export function ManageInvoices() {
     link.download = 'invoices.json';
     link.click();
     URL.revokeObjectURL(url);
+    toast.success('Invoices exported successfully');
   };
 
   // Status badge renderer
@@ -98,7 +157,7 @@ export function ManageInvoices() {
     enableDateFilter: true,
     dateField: 'invoiceDate',
     enableStatusFilter: true,
-    statusOptions: ['draft', 'submitted', 'paid']
+    statusOptions: ['draft', 'submitted', 'failed']
   };
 
   const columns = [
@@ -219,11 +278,32 @@ export function ManageInvoices() {
           {/* Stats Badge */}
           <div className="flex items-center gap-4">
             <Badge variant="outline" className="text-sm bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900 border-blue-200 text-blue-700 dark:text-blue-300">
-              {invoices.length} total invoice{invoices.length !== 1 ? 's' : ''}
+              {filteredInvoices.length} total invoice{filteredInvoices.length !== 1 ? 's' : ''}
             </Badge>
           </div>
         </div>
         
+        {/* Date Range Filter */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-blue-700 dark:text-blue-300">From Date</label>
+            <input
+              type="date"
+              value={dateRangeStart}
+              onChange={(e) => setDateRangeStart(e.target.value)}
+              className="w-full px-3 py-2 border border-blue-200 rounded-md focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-blue-700 dark:text-blue-300">To Date</label>
+            <input
+              type="date"
+              value={dateRangeEnd}
+              onChange={(e) => setDateRangeEnd(e.target.value)}
+              className="w-full px-3 py-2 border border-blue-200 rounded-md focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+        </div>
       </div>
       
       {/* Table with Internal Filters Disabled */}
@@ -231,7 +311,7 @@ export function ManageInvoices() {
         title="Invoices"
         description=""
         icon={<FileText className="h-5 w-5" />}
-        data={invoices}
+        data={filteredInvoices}
         columns={columns as Column<Invoice>[]}
         actions={actions}
         searchTerm={searchTerm}
@@ -258,6 +338,45 @@ export function ManageInvoices() {
         accentColor="blue"
       />
 
+      {/* Download Dialog */}
+      <Dialog open={downloadDialogOpen} onOpenChange={setDownloadDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-blue-700 dark:text-blue-300">
+              Download Invoice
+            </DialogTitle>
+            <DialogDescription>
+              Choose the format to download the invoice
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Download Format</label>
+              <Select value={downloadFormat} onValueChange={(value: 'pdf' | 'excel' | 'json') => setDownloadFormat(value)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pdf">PDF Document</SelectItem>
+                  <SelectItem value="excel">Excel Spreadsheet</SelectItem>
+                  <SelectItem value="json">JSON Data</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="flex justify-end gap-4">
+              <Button variant="outline" onClick={() => setDownloadDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={executeDownload} className="bg-blue-600 hover:bg-blue-700">
+                <FileDown className="h-4 w-4 mr-2" />
+                Download
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
       {/* Invoice Viewer Modal */}
       <InvoiceViewer 
         invoice={selectedInvoice}

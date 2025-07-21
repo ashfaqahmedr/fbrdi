@@ -137,3 +137,30 @@ button:focus-visible {
     @apply bg-background text-foreground;
   }
 }
+
+/* Print styles */
+@media print {
+  .print\\:shadow-none {
+    box-shadow: none !important;
+  }
+  
+  .print\\:border-none {
+    border: none !important;
+  }
+  
+  /* Hide non-essential elements when printing */
+  nav, header, .no-print {
+    display: none !important;
+  }
+  
+  /* Ensure proper page breaks */
+  .print-page-break {
+    page-break-before: always;
+  }
+  
+  /* Optimize colors for print */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+}

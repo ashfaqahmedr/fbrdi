@@ -280,14 +280,17 @@ export function ManageBuyers() {
         setSearchTerm={setSearchTerm}
         searchPlaceholder="Search buyers..."
         showInternalFilters={true}
-        dateFilter={dateFilter}
-        setDateFilter={setDateFilter}
         statusFilter={statusFilter}
         setStatusFilter={setStatusFilter}
+        registrationTypeFilter={registrationTypeFilter}
+        setRegistrationTypeFilter={setRegistrationTypeFilter}
+        registrationStatusFilter={registrationStatusFilter}
+        setRegistrationStatusFilter={setRegistrationStatusFilter}
         dynamicFilters={{
-          enableDateFilter: true,
-          enableStatusFilter: true,
-          statusOptions: registrationStatuses
+          enableRegistrationTypeFilter: true,
+          registrationTypeOptions: registrationTypes,
+          enableRegistrationStatusFilter: true,
+          registrationStatusOptions: registrationStatuses
         }}
         addButtonLabel="Add Buyer"
         onAddClick={() => {

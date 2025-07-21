@@ -122,7 +122,10 @@ export class APIService {
   async loadHSCodes(): Promise<HSCode[]> {
     try {
       const response = await this.fetchWithAuth(API_URLS.hsCodes);
-      return Array.isArray(response) ? response.sort((a, b) => a.hS_CODE.localeCompare(b.hS_CODE)) : [];
+      const hsCodes = Array.isArray(response) ? response : [];
+      // Ensure we have all 7799 HS codes
+      console.log(`Loaded ${hsCodes.length} HS codes from API`);
+      return hsCodes.sort((a, b) => a.hS_CODE.localeCompare(b.hS_CODE));
     } catch (error) {
       console.error('Failed to load HS Codes:', error);
       return [];

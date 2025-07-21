@@ -97,6 +97,7 @@ export interface AppSettings {
   toastPosition: 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left' | 'top-center' | 'bottom-center';
   autoSave: boolean;
   theme: 'light' | 'dark' | 'system';
+  sidebarCollapsed: boolean;
 }
 export interface ErrorLog {
   id: string;

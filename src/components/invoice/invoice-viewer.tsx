@@ -4,10 +4,11 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Download, Eye, FileText, QrCode } from 'lucide-react';
+import { Download, Eye, FileText, Code, Printer } from 'lucide-react';
 import { Invoice } from '@/lib/database';
 import { useDatabase } from '@/hooks/use-database';
 import { format } from 'date-fns';
+import { toast } from 'sonner';
 
 interface InvoiceViewerProps {
   invoice: Invoice | null;
@@ -17,7 +18,7 @@ interface InvoiceViewerProps {
 
 export function InvoiceViewer({ invoice, open, onOpenChange }: InvoiceViewerProps) {
   const { sellers, buyers } = useDatabase();
-  const [activeTab, setActiveTab] = useState('details');
+  const [activeTab, setActiveTab] = useState('preview');
 
   if (!invoice) return null;
 
@@ -37,9 +38,21 @@ export function InvoiceViewer({ invoice, open, onOpenChange }: InvoiceViewerProp
     }
   };
 
-  const handleDownloadPDF = () => {
-    // Implement PDF download functionality
-    console.log('Download PDF for invoice:', invoice.id);
+  const handlePrint = () => {
+    window.print();
+    toast.success('Print dialog opened');
+  };
+
+  const handleDownloadJSON = () => {
+    const dataStr = JSON.stringify(invoice, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `invoice-${invoice.invoiceRefNo}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast.success('JSON downloaded successfully');
   };
 
   return (
@@ -51,7 +64,7 @@ export function InvoiceViewer({ invoice, open, onOpenChange }: InvoiceViewerProp
             Invoice Details - {invoice.invoiceRefNo}
           </DialogTitle>
           <DialogDescription>
-            View complete invoice information and download options
+            View invoice preview and JSON data
           </DialogDescription>
         </DialogHeader>
 
@@ -78,111 +91,113 @@ export function InvoiceViewer({ invoice, open, onOpenChange }: InvoiceViewerProp
 
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="details" className="flex items-center gap-2">
+              <TabsTrigger value="preview" className="flex items-center gap-2">
                 <Eye className="h-4 w-4" />
-                Details
-              </TabsTrigger>
-              <TabsTrigger value="items" className="flex items-center gap-2">
-                <FileText className="h-4 w-4" />
-                Items
+                Preview
               </TabsTrigger>
               <TabsTrigger value="json" className="flex items-center gap-2">
-                <QrCode className="h-4 w-4" />
+                <Code className="h-4 w-4" />
                 JSON
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="details" className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Seller Information */}
-                <div className="space-y-3 p-4 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950 dark:to-emerald-950 rounded-lg border border-green-200 dark:border-green-800">
-                  <h4 className="font-semibold text-green-800 dark:text-green-200">Seller Information</h4>
-                  <div className="space-y-2 text-sm">
-                    <p><span className="font-medium text-green-700 dark:text-green-300">Name:</span> {seller?.businessName}</p>
-                    <p><span className="font-medium text-green-700 dark:text-green-300">NTN:</span> {seller?.ntn}</p>
-                    <p><span className="font-medium text-green-700 dark:text-green-300">Address:</span> {seller?.address}</p>
-                    <p><span className="font-medium text-green-700 dark:text-green-300">Province:</span> {seller?.province}</p>
+            <TabsContent value="preview" className="space-y-4">
+              {/* Invoice Preview - Printable Format */}
+              <div className="bg-white p-8 rounded-lg border shadow-sm print:shadow-none print:border-none" id="invoice-preview">
+                {/* Invoice Header */}
+                <div className="flex justify-between items-start mb-8">
+                  <div>
+                    <h1 className="text-3xl font-bold text-gray-900">INVOICE</h1>
+                    <p className="text-gray-600 mt-2">Invoice #: {invoice.invoiceRefNo}</p>
+                    {invoice.fbrInvoiceNumber && (
+                      <p className="text-gray-600">FBR Invoice #: {invoice.fbrInvoiceNumber}</p>
+                    )}
+                  </div>
+                  <div className="text-right">
+                    <p className="text-gray-600">Date: {format(new Date(invoice.invoiceDate), 'MMM dd, yyyy')}</p>
+                    <p className="text-gray-600">Type: {invoice.invoiceType}</p>
+                    {getStatusBadge(invoice.status)}
                   </div>
                 </div>
 
-                {/* Buyer Information */}
-                <div className="space-y-3 p-4 bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-950 dark:to-cyan-950 rounded-lg border border-blue-200 dark:border-blue-800">
-                  <h4 className="font-semibold text-blue-800 dark:text-blue-200">Buyer Information</h4>
-                  <div className="space-y-2 text-sm">
-                    <p><span className="font-medium text-blue-700 dark:text-blue-300">Name:</span> {buyer?.businessName}</p>
-                    <p><span className="font-medium text-blue-700 dark:text-blue-300">NTN:</span> {buyer?.ntn}</p>
-                    <p><span className="font-medium text-blue-700 dark:text-blue-300">Address:</span> {buyer?.address}</p>
-                    <p><span className="font-medium text-blue-700 dark:text-blue-300">Province:</span> {buyer?.province}</p>
+                {/* Seller and Buyer Info */}
+                <div className="grid grid-cols-2 gap-8 mb-8">
+                  <div>
+                    <h3 className="font-semibold text-gray-900 mb-3">From:</h3>
+                    <div className="text-gray-700">
+                      <p className="font-medium">{seller?.businessName}</p>
+                      <p>NTN: {seller?.ntn}</p>
+                      <p>{seller?.address}</p>
+                      <p>{seller?.province}</p>
+                    </div>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900 mb-3">To:</h3>
+                    <div className="text-gray-700">
+                      <p className="font-medium">{buyer?.businessName}</p>
+                      <p>NTN: {buyer?.ntn}</p>
+                      <p>{buyer?.address}</p>
+                      <p>{buyer?.province}</p>
+                    </div>
                   </div>
                 </div>
-              </div>
+                {/* Items Table */}
+                <div className="mb-8">
+                  <h3 className="font-semibold text-gray-900 mb-4">Items:</h3>
+                  <table className="w-full border-collapse border border-gray-300">
+                    <thead>
+                      <tr className="bg-gray-50">
+                        <th className="border border-gray-300 px-4 py-2 text-left">#</th>
+                        <th className="border border-gray-300 px-4 py-2 text-left">Description</th>
+                        <th className="border border-gray-300 px-4 py-2 text-left">HS Code</th>
+                        <th className="border border-gray-300 px-4 py-2 text-right">Qty</th>
+                        <th className="border border-gray-300 px-4 py-2 text-right">Unit Price</th>
+                        <th className="border border-gray-300 px-4 py-2 text-right">Tax %</th>
+                        <th className="border border-gray-300 px-4 py-2 text-right">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {invoice.items.map((item, index) => {
+                        const lineTotal = (item.quantity * item.unitPrice) * (1 + item.taxRate / 100);
+                        return (
+                          <tr key={item.id}>
+                            <td className="border border-gray-300 px-4 py-2">{index + 1}</td>
+                            <td className="border border-gray-300 px-4 py-2">{item.description}</td>
+                            <td className="border border-gray-300 px-4 py-2">{item.hsCode}</td>
+                            <td className="border border-gray-300 px-4 py-2 text-right">{item.quantity} {item.uom}</td>
+                            <td className="border border-gray-300 px-4 py-2 text-right">{invoice.currency} {item.unitPrice.toFixed(2)}</td>
+                            <td className="border border-gray-300 px-4 py-2 text-right">{item.taxRate}%</td>
+                            <td className="border border-gray-300 px-4 py-2 text-right">{invoice.currency} {lineTotal.toFixed(2)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
 
-              {/* Invoice Summary */}
-              <div className="p-4 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-950 dark:to-pink-950 rounded-lg border border-purple-200 dark:border-purple-800">
-                <h4 className="font-semibold text-purple-800 dark:text-purple-200 mb-3">Invoice Summary</h4>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                  <div>
-                    <p className="font-medium text-purple-700 dark:text-purple-300">Type:</p>
-                    <p>{invoice.invoiceType}</p>
-                  </div>
-                  <div>
-                    <p className="font-medium text-purple-700 dark:text-purple-300">Currency:</p>
-                    <p>{invoice.currency}</p>
-                  </div>
-                  <div>
-                    <p className="font-medium text-purple-700 dark:text-purple-300">Gross Amount:</p>
-                    <p>{invoice.currency} {invoice.grossAmount.toFixed(2)}</p>
-                  </div>
-                  <div>
-                    <p className="font-medium text-purple-700 dark:text-purple-300">Total Amount:</p>
-                    <p className="font-bold">{invoice.currency} {invoice.totalAmount.toFixed(2)}</p>
+                {/* Totals */}
+                <div className="flex justify-end">
+                  <div className="w-64">
+                    <div className="flex justify-between py-2 border-b">
+                      <span>Gross Amount:</span>
+                      <span>{invoice.currency} {invoice.grossAmount.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between py-2 border-b">
+                      <span>Sales Tax:</span>
+                      <span>{invoice.currency} {invoice.salesTax.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between py-2 font-bold text-lg border-b-2 border-gray-900">
+                      <span>Total Amount:</span>
+                      <span>{invoice.currency} {invoice.totalAmount.toFixed(2)}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="items" className="space-y-4">
-              <div className="space-y-4">
-                {invoice.items.map((item, index) => (
-                  <div key={item.id} className="p-4 border rounded-lg bg-gradient-to-r from-gray-50 to-blue-50 dark:from-gray-900 dark:to-blue-900">
-                    <div className="flex items-center justify-between mb-3">
-                      <h5 className="font-medium text-blue-700 dark:text-blue-300">Item {index + 1}</h5>
-                      <Badge variant="outline" className="text-green-700 bg-green-50">
-                        {invoice.currency} {((item.quantity * item.unitPrice) * (1 + item.taxRate / 100)).toFixed(2)}
-                      </Badge>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                      <div>
-                        <p className="font-medium text-gray-700 dark:text-gray-300">HS Code:</p>
-                        <p className="font-mono">{item.hsCode}</p>
-                      </div>
-                      <div>
-                        <p className="font-medium text-gray-700 dark:text-gray-300">Quantity:</p>
-                        <p>{item.quantity} {item.uom}</p>
-                      </div>
-                      <div>
-                        <p className="font-medium text-gray-700 dark:text-gray-300">Unit Price:</p>
-                        <p>{invoice.currency} {item.unitPrice.toFixed(2)}</p>
-                      </div>
-                      <div>
-                        <p className="font-medium text-gray-700 dark:text-gray-300">Tax Rate:</p>
-                        <p>{item.taxRate}%</p>
-                      </div>
-                    </div>
-                    
-                    <div className="mt-2">
-                      <p className="font-medium text-gray-700 dark:text-gray-300">Description:</p>
-                      <p className="text-sm">{item.description}</p>
-                    </div>
-                  </div>
-                ))}
               </div>
             </TabsContent>
 
             <TabsContent value="json" className="space-y-4">
-              <div className="p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border">
-                <pre className="text-sm overflow-x-auto">
+              <div className="max-h-[400px] overflow-y-auto p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border">
+                <pre className="text-sm">
                   {JSON.stringify(invoice, null, 2)}
                 </pre>
               </div>
@@ -196,9 +211,13 @@ export function InvoiceViewer({ invoice, open, onOpenChange }: InvoiceViewerProp
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               Close
             </Button>
-            <Button onClick={handleDownloadPDF} className="bg-green-600 hover:bg-green-700">
+            <Button onClick={handlePrint} className="bg-purple-600 hover:bg-purple-700">
+              <Printer className="h-4 w-4 mr-2" />
+              Print
+            </Button>
+            <Button onClick={handleDownloadJSON} className="bg-green-600 hover:bg-green-700">
               <Download className="h-4 w-4 mr-2" />
-              Download PDF
+              Download JSON
             </Button>
           </div>
         </div>

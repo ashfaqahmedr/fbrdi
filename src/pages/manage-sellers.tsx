@@ -50,11 +50,19 @@ export function ManageSellers({ initialModalOpen = false, onSellerAdded }: Manag
 
   // Get unique values for filter options
 
+  const registrationTypes = useMemo(() => {
+    const types = [...new Set(sellers.map(seller => seller.registrationType).filter(Boolean))];
+    return types.sort();
+  }, [sellers]);
   const registrationStatuses = useMemo(() => {
     const statuses = [...new Set(sellers.map(seller => seller.registrationStatus).filter(Boolean))];
     return statuses.sort();
   }, [sellers]);
 
+  const businessActivities = useMemo(() => {
+    const activities = [...new Set(sellers.map(seller => seller.businessActivity).filter(Boolean))];
+    return activities.sort();
+  }, [sellers]);
   // Filter sellers based on search term and filters
   const filteredSellers = useMemo(() => {
     return sellers.filter(seller => {
@@ -485,14 +493,21 @@ export function ManageSellers({ initialModalOpen = false, onSellerAdded }: Manag
         setSearchTerm={setSearchTerm}
         searchPlaceholder="Search sellers..."
         showInternalFilters={true}
-        // dateFilter={dateFilter}
-        // setDateFilter={setDateFilter}
         statusFilter={statusFilter}
         setStatusFilter={setStatusFilter}
+        registrationTypeFilter={registrationTypeFilter}
+        setRegistrationTypeFilter={setRegistrationTypeFilter}
+        registrationStatusFilter={registrationStatusFilter}
+        setRegistrationStatusFilter={setRegistrationStatusFilter}
+        activityFilter={activityFilter}
+        setActivityFilter={setActivityFilter}
         dynamicFilters={{
-          enableDateFilter: true,
-          enableStatusFilter: true,
-          statusOptions: registrationStatuses
+          enableRegistrationTypeFilter: true,
+          registrationTypeOptions: registrationTypes,
+          enableRegistrationStatusFilter: true,
+          registrationStatusOptions: registrationStatuses,
+          enableActivityFilter: true,
+          activityOptions: businessActivities
         }}
         addButtonLabel="Add Seller"
         onAddClick={() => setIsDialogOpen(true)}

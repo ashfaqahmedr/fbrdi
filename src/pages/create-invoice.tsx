@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
-import { FileText, Building2, Save, Send, RotateCcw, Code } from 'lucide-react';
+import { FileText, Building2, Save, Send, RotateCcw, Code, Plus } from 'lucide-react';
 import { useDatabase } from '@/hooks/use-database';
 import { useAPI } from '@/contexts/api-context';
 import { useInvoice } from '@/contexts/invoice-context';
@@ -23,7 +23,7 @@ interface CreateInvoiceProps {
 export function CreateInvoice({ editingInvoice }: CreateInvoiceProps) {
   const { sellers, buyers, addInvoice, updateInvoice, settings } = useDatabase();
   const { setApiToken } = useAPI();
-  const { items, clearItems, setItems } = useInvoice();
+  const { items, clearItems, setItems, addItem } = useInvoice();
   
   const [selectedSeller, setSelectedSeller] = useState('');
   const [selectedBuyer, setSelectedBuyer] = useState('');
@@ -63,8 +63,17 @@ export function CreateInvoice({ editingInvoice }: CreateInvoiceProps) {
       setInvoiceDate(editingInvoice.invoiceDate);
       setCurrency(editingInvoice.currency);
       setScenarioId(editingInvoice.scenarioId || '');
-      setInvoiceRef(editingInvoice.invoiceRefNo);
       setItems(editingInvoice.items);
+      
+      // Regenerate invoice ref for edit mode
+      const seller = sellers.find(s => s.id === editingInvoice.sellerId);
+      if (seller) {
+        const prefix = editingInvoice.invoiceType === 'Sale Invoice' ? 'SI' : 'DN';
+        const nextId = editingInvoice.invoiceType === 'Sale Invoice' 
+          ? seller.lastSaleInvoiceId + 1
+          : seller.lastDebitNoteId + 1;
+        setInvoiceRef(`${prefix}-${nextId.toString().padStart(4, '0')}`);
+      }
     }
   }, [editingInvoice, setItems]);
 
@@ -108,6 +117,35 @@ export function CreateInvoice({ editingInvoice }: CreateInvoiceProps) {
     }
   }, [buyers, selectedBuyer, editingInvoice]);
 
+  const handleAddNewItem = () => {
+    if (!selectedSeller) {
+      toast.error('Please select a seller first');
+      return;
+    }
+    
+    const newItem = {
+      id: `item-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      hsCode: "5904.9000",
+      description: "TEXTILE PRODUCTS",
+      serviceTypeId: 18,
+      saleType: "Services",
+      uom: "PCS",
+      quantity: 1,
+      unitPrice: 0,
+      taxRate: 0,
+      rateId: undefined,
+      sroSchedule: undefined,
+      sroItem: undefined,
+      annexureId: 3,
+      uomOptions: ["PCS", "KG", "MTR", "SET", "LTR"],
+      taxRateOptions: [],
+      sroScheduleOptions: [],
+      sroItemOptions: [],
+    };
+    
+    addItem(newItem);
+    toast.success('New item added');
+  };
   const generateInvoicePayload = () => {
     const seller = sellers.find(s => s.id === selectedSeller);
     const buyer = buyers.find(b => b.id === selectedBuyer);
@@ -379,7 +417,9 @@ export function CreateInvoice({ editingInvoice }: CreateInvoiceProps) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      {/* Sticky Header */}
+      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b pb-4 mb-6">
+        <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
             {editingInvoice ? 'Edit Invoice' : 'Create Invoice'}
@@ -391,6 +431,7 @@ export function CreateInvoice({ editingInvoice }: CreateInvoiceProps) {
         <Badge variant="outline" className="text-sm bg-gradient-to-r from-blue-50 to-purple-50 text-blue-700 border-blue-200 dark:from-blue-950 dark:to-purple-950 dark:text-blue-300 dark:border-blue-800">
           {editingInvoice ? 'Edit Mode' : 'Create Mode'}
         </Badge>
+        </div>
       </div>
 
       {/* Seller & Buyer Information */}
@@ -452,6 +493,7 @@ export function CreateInvoice({ editingInvoice }: CreateInvoiceProps) {
               <Label htmlFor="invoiceType" className="text-purple-700 dark:text-purple-300 font-medium">Invoice Type</Label>
               <Select value={invoiceType} onValueChange={(value: 'Sale Invoice' | 'Debit Note') => setInvoiceType(value)}>
                 <SelectTrigger className="border-purple-200 focus:border-purple-500 hover:border-purple-300 transition-colors">
+                  ref={invoiceTypeRef}
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -493,7 +535,6 @@ export function CreateInvoice({ editingInvoice }: CreateInvoiceProps) {
                 <Select value={scenarioId} onValueChange={setScenarioId}>
                   <SelectTrigger className="border-orange-200 focus:border-orange-500 hover:border-orange-300 transition-colors">
                     <SelectValue 
-                      ref={lastItemRef}
                       placeholder="Select scenario" 
                     />
                   </SelectTrigger>
@@ -528,6 +569,16 @@ export function CreateInvoice({ editingInvoice }: CreateInvoiceProps) {
         currency={currency}
       />
 
+      {/* Add Item Button at Bottom */}
+      <div className="flex justify-center">
+        <Button 
+          onClick={handleAddNewItem}
+          className="bg-green-600 hover:bg-green-700 text-white shadow-md hover:shadow-lg transition-all duration-200"
+        >
+          <Plus className="h-4 w-4 mr-2" />
+          Add New Item
+        </Button>
+      </div>
       {/* Action Buttons */}
       <div className="flex flex-col sm:flex-row gap-4 justify-end bg-gradient-to-r from-gray-50 to-blue-50 dark:from-gray-900 dark:to-blue-900 p-6 rounded-lg shadow-sm border">
         <Button 

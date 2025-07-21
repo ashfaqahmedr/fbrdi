@@ -2,7 +2,7 @@ import React, { ReactNode, useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Search, Download } from 'lucide-react';
+import { Plus, Search, Download, Edit, Eye, Trash2 } from 'lucide-react';
 import { DataTable, Column, Action } from '@/components/ui/data-table';
 import { cn } from '@/lib/utils';
 
@@ -479,6 +479,25 @@ export function UniversalTableLayout<T extends { id: string }>({
 
   const colorClasses = getColorClasses();
 
+  // Enhanced action icons with colors
+  const enhanceActions = (actions: Action<T>[] | undefined) => {
+    if (!actions) return undefined;
+    
+    return actions.map(action => ({
+      ...action,
+      icon: React.cloneElement(action.icon as React.ReactElement, {
+        className: cn(
+          "h-4 w-4",
+          action.className?.includes('text-green') ? 'text-green-600 hover:text-green-700' :
+          action.className?.includes('text-blue') ? 'text-blue-600 hover:text-blue-700' :
+          action.className?.includes('text-red') ? 'text-red-600 hover:text-red-700' :
+          action.className?.includes('text-purple') ? 'text-purple-600 hover:text-purple-700' :
+          action.className?.includes('text-orange') ? 'text-orange-600 hover:text-orange-700' :
+          'text-gray-600 hover:text-gray-700'
+        )
+      })
+    }));
+  };
   // Generate pagination buttons
   const renderPaginationButtons = () => {
     const buttons = [];
@@ -578,7 +597,7 @@ export function UniversalTableLayout<T extends { id: string }>({
           <DataTable
             data={paginatedData}
             columns={columns}
-            actions={actions}
+            actions={enhanceActions(actions)}
             emptyState={emptyState}
             headerClassName={headerClassName || `bg-${accentColor}-50 dark:bg-${accentColor}-950 text-${accentColor}-700 dark:text-${accentColor}-300`}
             rowClassName={rowClassName}
@@ -587,8 +606,9 @@ export function UniversalTableLayout<T extends { id: string }>({
       </div>
       
       {/* Pagination at Bottom */}
-      {filteredData.length > 0 && (
-        <div className="mt-4 pt-4 border-t flex items-center justify-between bg-background">
+      <div className="mt-4 pt-4 border-t flex items-center justify-between bg-background">
+        {filteredData.length > 0 ? (
+          <>
           <div className="text-sm text-muted-foreground">
             Showing {paginatedData.length} of {filteredData.length} {title.toLowerCase()}
           </div>
@@ -630,8 +650,13 @@ export function UniversalTableLayout<T extends { id: string }>({
               </Button>
             </div>
           )}
-        </div>
-      )}
+          </>
+        ) : (
+          <div className="text-sm text-muted-foreground">
+            No {title.toLowerCase()} to display
+          </div>
+        )}
+      </div>
     </div>
   );
 }

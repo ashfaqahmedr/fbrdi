@@ -31,6 +31,7 @@ const defaultSettings: AppSettings = {
   toastPosition: 'top-right',
   autoSave: true,
   theme: 'system',
+  sidebarCollapsed: false,
 };
 const DatabaseContext = createContext<DatabaseContextType | undefined>(undefined);
 
