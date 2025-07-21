@@ -15,6 +15,7 @@ import {
 interface SidebarProps {
   open: boolean;
   onClose: () => void;
+  className?: string;
 }
 
 const navigation = [
@@ -50,7 +51,7 @@ const navigation = [
   },
 ];
 
-export function Sidebar({ open, onClose }: SidebarProps) {
+export function Sidebar({ open, onClose, className = '' }: SidebarProps) {
   const location = useLocation();
 
   return (
@@ -65,9 +66,10 @@ export function Sidebar({ open, onClose }: SidebarProps) {
       
       {/* Sidebar */}
       <aside className={cn(
-        "fixed left-0 top-16 z-50 h-[calc(100vh-4rem)] w-64 transform border-r bg-background transition-transform duration-300 ease-in-out",
-        open ? "translate-x-0" : "-translate-x-full",
-        "-translate-x-full" // Always visible on large screens
+        'fixed top-0 left-0 h-screen w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 transition-transform duration-300 ease-in-out z-40',
+        open ? 'translate-x-0' : '-translate-x-full',
+        'lg:translate-x-0', // Always show on large screens
+        className
       )}>
         <div className="flex h-full flex-col">
           {/* Close button for mobile */}
@@ -86,7 +88,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
                   <Link
                     key={item.name}
                     to={item.href}
-                    onClick={onClose}
+                    onClick={() => onClose()}
                     className={cn(
                       "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                       isActive

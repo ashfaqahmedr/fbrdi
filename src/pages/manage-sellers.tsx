@@ -24,6 +24,11 @@ interface ManageSellersProps {
 export function ManageSellers({ initialModalOpen = false, onSellerAdded }: ManageSellersProps = {}) {
   const { sellers, addSeller, updateSeller, deleteSeller } = useDatabase();
   const [searchTerm, setSearchTerm] = useState('');
+  const [registrationTypeFilter, setRegistrationTypeFilter] = useState('all');
+  const [registrationStatusFilter, setRegistrationStatusFilter] = useState('all');
+  const [activityFilter, setActivityFilter] = useState('all');
+  const [dateFilter, setDateFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [isDialogOpen, setIsDialogOpen] = useState(initialModalOpen);
   const [editingSeller, setEditingSeller] = useState<Seller | null>(null);
   const [isValidating, setIsValidating] = useState(false);
@@ -43,13 +48,38 @@ export function ManageSellers({ initialModalOpen = false, onSellerAdded }: Manag
 
   const { provinces } = useProvinces();
 
-  // Filter sellers based on search term
+  // Get unique values for filter options
+
+  const registrationStatuses = useMemo(() => {
+    const statuses = [...new Set(sellers.map(seller => seller.registrationStatus).filter(Boolean))];
+    return statuses.sort();
+  }, [sellers]);
+
+  // Filter sellers based on search term and filters
   const filteredSellers = useMemo(() => {
-    return sellers.filter(seller =>
-      seller.businessName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      seller.ntn.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }, [sellers, searchTerm]);
+    return sellers.filter(seller => {
+      // Search filter
+      const matchesSearch = searchTerm === '' ||
+        seller.businessName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        seller.ntn.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        seller.businessActivity.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        seller.sector.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      // Registration Type filter
+      const matchesRegistrationType = registrationTypeFilter === 'all' || 
+        seller.registrationType === registrationTypeFilter;
+      
+      // Registration Status filter
+      const matchesRegistrationStatus = registrationStatusFilter === 'all' || 
+        seller.registrationStatus === registrationStatusFilter;
+      
+      // Activity filter
+      const matchesActivity = activityFilter === 'all' || 
+        seller.businessActivity === activityFilter;
+      
+      return matchesSearch && matchesRegistrationType && matchesRegistrationStatus && matchesActivity;
+    });
+  }, [sellers, searchTerm, registrationTypeFilter, registrationStatusFilter, activityFilter]);
 
   const resetForm = () => {
     setFormData({
@@ -417,22 +447,55 @@ export function ManageSellers({ initialModalOpen = false, onSellerAdded }: Manag
 
   return (
     <div className="space-y-6">
+      {/* Custom Header with External Filters */}
+      <div className="bg-white dark:bg-gray-950 rounded-lg border p-6">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
+          <div className="flex items-center gap-3">
+            <Users className="h-6 w-6 text-purple-600" />
+            <div>
+              <h1 className="text-2xl font-bold text-purple-900 dark:text-purple-100">
+                Manage Sellers
+              </h1>
+              <p className="text-muted-foreground mt-1">
+                Add and manage seller profiles for invoice generation
+              </p>
+            </div>
+          </div>
+          
+          {/* Stats Badge */}
+          <div className="flex items-center gap-4">
+            <Badge variant="outline" className="text-sm bg-gradient-to-r from-purple-50 to-purple-100 dark:from-purple-950 dark:to-purple-900 border-purple-200 text-purple-700 dark:text-purple-300">
+              {sellers.length} total seller{sellers.length !== 1 ? 's' : ''}
+            </Badge>
+          </div>
+        </div>
+        
+      
+      </div>
+      
+      {/* Table with Internal Filters Enabled */}
       <UniversalTableLayout
-        title="Manage Sellers"
-        description="Add and manage seller profiles for invoice generation"
+        title="Sellers"
+        description=""
         icon={<Users className="h-5 w-5" />}
-        data={sellers}
-        filteredData={filteredSellers}
+        data={filteredSellers}
         columns={columns as Column<Seller>[]}
         actions={actions}
         searchTerm={searchTerm}
         setSearchTerm={setSearchTerm}
         searchPlaceholder="Search sellers..."
-        addButtonLabel="Add Seller"
-        onAddClick={() => {
-          resetForm();
-          setIsDialogOpen(true);
+        showInternalFilters={true}
+        // dateFilter={dateFilter}
+        // setDateFilter={setDateFilter}
+        statusFilter={statusFilter}
+        setStatusFilter={setStatusFilter}
+        dynamicFilters={{
+          enableDateFilter: true,
+          enableStatusFilter: true,
+          statusOptions: registrationStatuses
         }}
+        addButtonLabel="Add Seller"
+        onAddClick={() => setIsDialogOpen(true)}
         onExportClick={handleExport}
         emptyState={{
           icon: <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />,
@@ -440,7 +503,7 @@ export function ManageSellers({ initialModalOpen = false, onSellerAdded }: Manag
           description: "Add your first seller to get started"
         }}
         headerClassName="bg-purple-50 dark:bg-purple-950 text-purple-700 dark:text-purple-300"
-        rowClassName="hover:bg-gradient-to-r hover:from-gray-50 hover:to-purple-50/30 dark:hover:from-gray-900 dark:hover:to-purple-900/30 transition-colors"
+        rowClassName="bg-white dark:bg-gray-950 hover:bg-purple-50/30 dark:hover:bg-purple-950/30"
         accentColor="purple"
       />
 

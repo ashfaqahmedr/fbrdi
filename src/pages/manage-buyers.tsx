@@ -19,6 +19,10 @@ import { Column } from '@/components/ui/data-table';
 export function ManageBuyers() {
   const { buyers, addBuyer, updateBuyer, deleteBuyer } = useDatabase();
   const [searchTerm, setSearchTerm] = useState('');
+  const [registrationTypeFilter, setRegistrationTypeFilter] = useState('all');
+  const [registrationStatusFilter, setRegistrationStatusFilter] = useState('all');
+  const [dateFilter, setDateFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingBuyer, setEditingBuyer] = useState<Buyer | null>(null);
   const [isValidating, setIsValidating] = useState(false);
@@ -33,13 +37,38 @@ export function ManageBuyers() {
 
   const { provinces } = useProvinces();
 
-  // Filter buyers based on search term
+  // Get unique values for filter options
+  const registrationTypes = useMemo(() => {
+    const types = [...new Set(buyers.map(buyer => buyer.registrationType).filter(Boolean))];
+    return types.sort();
+  }, [buyers]);
+
+  const registrationStatuses = useMemo(() => {
+    const statuses = [...new Set(buyers.map(buyer => buyer.registrationStatus).filter(Boolean))];
+    return statuses.sort();
+  }, [buyers]);
+
+  // Filter buyers based on search term and filters
   const filteredBuyers = useMemo(() => {
-    return buyers.filter(buyer =>
-      buyer.businessName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      buyer.ntn.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }, [buyers, searchTerm]);
+    return buyers.filter(buyer => {
+      // Search filter
+      const matchesSearch = searchTerm === '' ||
+        buyer.businessName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        buyer.ntn.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        buyer.address.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        buyer.province.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      // Registration Type filter
+      const matchesRegistrationType = registrationTypeFilter === 'all' || 
+        buyer.registrationType === registrationTypeFilter;
+      
+      // Registration Status filter
+      const matchesRegistrationStatus = registrationStatusFilter === 'all' || 
+        buyer.registrationStatus === registrationStatusFilter;
+      
+      return matchesSearch && matchesRegistrationType && matchesRegistrationStatus;
+    });
+  }, [buyers, searchTerm, registrationTypeFilter, registrationStatusFilter]);
 
   const resetForm = () => {
     setFormData({
@@ -214,17 +243,52 @@ export function ManageBuyers() {
 
   return (
     <div className="space-y-6">
+      {/* Custom Header with External Filters */}
+      <div className="bg-white dark:bg-gray-950 rounded-lg border p-6">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
+          <div className="flex items-center gap-3">
+            <Users className="h-6 w-6 text-green-600" />
+            <div>
+              <h1 className="text-2xl font-bold text-green-900 dark:text-green-100">
+                Manage Buyers
+              </h1>
+              <p className="text-muted-foreground mt-1">
+                Add and manage buyer profiles for invoice generation
+              </p>
+            </div>
+          </div>
+          
+          {/* Stats Badge */}
+          <div className="flex items-center gap-4">
+            <Badge variant="outline" className="text-sm bg-gradient-to-r from-green-50 to-green-100 dark:from-green-950 dark:to-green-900 border-green-200 text-green-700 dark:text-green-300">
+              {buyers.length} total buyer{buyers.length !== 1 ? 's' : ''}
+            </Badge>
+          </div>
+        </div>
+
+      </div>
+      
+      {/* Table with Internal Filters Enabled */}
       <UniversalTableLayout
-        title="Manage Buyers"
-        description="Add and manage buyer profiles for invoice generation"
+        title="Buyers"
+        description=""
         icon={<Users className="h-5 w-5" />}
-        data={buyers}
-        filteredData={filteredBuyers}
-         columns={columns as Column<Buyer>[]}
+        data={filteredBuyers}
+        columns={columns as Column<Buyer>[]}
         actions={actions}
         searchTerm={searchTerm}
         setSearchTerm={setSearchTerm}
         searchPlaceholder="Search buyers..."
+        showInternalFilters={true}
+        dateFilter={dateFilter}
+        setDateFilter={setDateFilter}
+        statusFilter={statusFilter}
+        setStatusFilter={setStatusFilter}
+        dynamicFilters={{
+          enableDateFilter: true,
+          enableStatusFilter: true,
+          statusOptions: registrationStatuses
+        }}
         addButtonLabel="Add Buyer"
         onAddClick={() => {
           resetForm();
@@ -237,7 +301,7 @@ export function ManageBuyers() {
           description: "Add your first buyer to get started"
         }}
         headerClassName="bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-300"
-        rowClassName="hover:bg-gradient-to-r hover:from-gray-50 hover:to-cyan-50 dark:hover:from-gray-900 dark:hover:to-cyan-900 transition-colors"
+        rowClassName="bg-white dark:bg-gray-950 hover:bg-green-50/30 dark:hover:bg-green-950/30"
         accentColor="green"
       />
 

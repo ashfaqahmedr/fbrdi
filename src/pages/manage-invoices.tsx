@@ -14,49 +14,28 @@ export function ManageInvoices() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState('all');
+  const [registrationTypeFilter, setRegistrationTypeFilter] = useState('all');
+  const [registrationStatusFilter, setRegistrationStatusFilter] = useState('all');
+  const [activityFilter, setActivityFilter] = useState('all');
+  const [isInfiniteScroll, setIsInfiniteScroll] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [viewerOpen, setViewerOpen] = useState(false);
 
-  // Filter invoices based on search term, status, and date
-  const filteredInvoices = useMemo(() => {
-    return invoices.filter(invoice => {
-      // Search filter
-      const matchesSearch = 
-        invoice.invoiceRefNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (invoice.fbrInvoiceNumber && invoice.fbrInvoiceNumber.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        sellers.find(s => s.id === invoice.sellerId)?.businessName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        buyers.find(b => b.id === invoice.buyerId)?.businessName.toLowerCase().includes(searchTerm.toLowerCase());
-      
-      // Status filter
-      const matchesStatus = statusFilter === 'all' || invoice.status === statusFilter;
-      
-      // Date filter
-      let matchesDate = true;
-      const invoiceDate = new Date(invoice.invoiceDate);
-      const now = new Date();
-      
-      if (dateFilter === 'today') {
-        matchesDate = (
-          invoiceDate.getDate() === now.getDate() &&
-          invoiceDate.getMonth() === now.getMonth() &&
-          invoiceDate.getFullYear() === now.getFullYear()
-        );
-      } else if (dateFilter === 'week') {
-        const oneWeekAgo = new Date();
-        oneWeekAgo.setDate(now.getDate() - 7);
-        matchesDate = invoiceDate >= oneWeekAgo;
-      } else if (dateFilter === 'month') {
-        matchesDate = (
-          invoiceDate.getMonth() === now.getMonth() &&
-          invoiceDate.getFullYear() === now.getFullYear()
-        );
-      } else if (dateFilter === 'year') {
-        matchesDate = invoiceDate.getFullYear() === now.getFullYear();
-      }
-      
-      return matchesSearch && matchesStatus && matchesDate;
-    });
-  }, [invoices, searchTerm, statusFilter, dateFilter, sellers, buyers]);
+  // Get unique values for filter options from sellers data
+  const registrationTypes = useMemo(() => {
+    const types = [...new Set(sellers.map(seller => seller.registrationType).filter(Boolean))];
+    return types.sort();
+  }, [sellers]);
+
+  const registrationStatuses = useMemo(() => {
+    const statuses = [...new Set(sellers.map(seller => seller.registrationStatus).filter(Boolean))];
+    return statuses.sort();
+  }, [sellers]);
+
+  const businessActivities = useMemo(() => {
+    const activities = [...new Set(sellers.map(seller => seller.businessActivity).filter(Boolean))];
+    return activities.sort();
+  }, [sellers]);
 
   const handleViewInvoice = (invoice: Invoice) => {
     setSelectedInvoice(invoice);
@@ -114,36 +93,14 @@ export function ManageInvoices() {
     }
   };
 
-  // Define filters for the universal table layout
-  const filters = [
-    {
-      id: 'status',
-      label: 'Status',
-      options: [
-        { value: 'all', label: 'All Status' },
-        { value: 'draft', label: 'Draft' },
-        { value: 'submitted', label: 'Submitted' },
-        { value: 'failed', label: 'Failed' }
-      ],
-      value: statusFilter,
-      onChange: setStatusFilter
-    },
-    {
-      id: 'date',
-      label: 'Date Range',
-      options: [
-        { value: 'all', label: 'All Time' },
-        { value: 'today', label: 'Today' },
-        { value: 'week', label: 'This Week' },
-        { value: 'month', label: 'This Month' },
-        { value: 'year', label: 'This Year' }
-      ],
-      value: dateFilter,
-      onChange: setDateFilter
-    }
-  ];
+  // Dynamic filter configuration for UniversalTableLayout
+  const dynamicFilters = {
+    enableDateFilter: true,
+    dateField: 'invoiceDate',
+    enableStatusFilter: true,
+    statusOptions: ['draft', 'submitted', 'paid']
+  };
 
-  // Define columns for the data table
   const columns = [
     {
       header: "Invoice Ref",
@@ -244,18 +201,50 @@ export function ManageInvoices() {
 
   return (
     <div className="space-y-6">
+      {/* Custom Header with External Filters */}
+      <div className="bg-white dark:bg-gray-950 rounded-lg border p-6">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
+          <div className="flex items-center gap-3">
+            <FileText className="h-6 w-6 text-blue-600" />
+            <div>
+              <h1 className="text-2xl font-bold text-blue-900 dark:text-blue-100">
+                Manage Invoices
+              </h1>
+              <p className="text-muted-foreground mt-1">
+                Create and manage invoices for your business
+              </p>
+            </div>
+          </div>
+          
+          {/* Stats Badge */}
+          <div className="flex items-center gap-4">
+            <Badge variant="outline" className="text-sm bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900 border-blue-200 text-blue-700 dark:text-blue-300">
+              {invoices.length} total invoice{invoices.length !== 1 ? 's' : ''}
+            </Badge>
+          </div>
+        </div>
+        
+      </div>
+      
+      {/* Table with Internal Filters Disabled */}
       <UniversalTableLayout
-        title="Manage Invoices"
-        description="Create and manage invoices for your business"
+        title="Invoices"
+        description=""
         icon={<FileText className="h-5 w-5" />}
         data={invoices}
-        filteredData={filteredInvoices}
         columns={columns as Column<Invoice>[]}
         actions={actions}
         searchTerm={searchTerm}
         setSearchTerm={setSearchTerm}
         searchPlaceholder="Search invoices..."
-        filters={filters}
+        dynamicFilters={dynamicFilters}
+        showInternalFilters={true}
+        dateFilter={dateFilter}
+        setDateFilter={setDateFilter}
+        statusFilter={statusFilter}
+        setStatusFilter={setStatusFilter}
+        isInfiniteScroll={isInfiniteScroll}
+        setIsInfiniteScroll={setIsInfiniteScroll}
         addButtonLabel="Add Invoice"
         onAddClick={handleAddInvoice}
         onExportClick={handleExport}

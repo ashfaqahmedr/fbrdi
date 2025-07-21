@@ -10,25 +10,17 @@ interface LayoutProps {
 export function Layout({ children }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const toggleSidebar = () => {
-    setSidebarOpen(!sidebarOpen);
-  };
-
-  const closeSidebar = () => {
-    setSidebarOpen(false);
-  };
-
   return (
-    <div className="min-h-screen bg-background w-full max-w-7xl mx-auto">
-      <Header onMenuClick={toggleSidebar} sidebarOpen={sidebarOpen} />
-      <div className="flex">
-        <Sidebar open={sidebarOpen} onClose={closeSidebar} />
+    <div className="min-h-screen bg-background flex flex-col">
+      <Header onMenuClick={() => setSidebarOpen(!sidebarOpen)} className="sticky top-0 z-50" />
+      <div className="flex flex-1 overflow-hidden">
+        <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} className="fixed top-0 left-0 h-screen z-40" />
         <main className={cn(
-          "w-full max-w-7xl mx-auto flex-1 transition-all duration-300 ",
+          "flex-1 transition-all duration-300 overflow-y-auto",
           "lg:ml-64", // Always show sidebar on large screens
           sidebarOpen ? "ml-64" : "ml-0" // Toggle on smaller screens
         )}>
-          <div className="w-full max-w-full mx-auto p-6">
+          <div className="container mx-auto p-6 pb-20">
             {children}
           </div>
         </main>

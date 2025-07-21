@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Plus, Trash2, Package, Loader2 } from 'lucide-react';
@@ -12,9 +11,9 @@ import { useInvoice } from '@/contexts/invoice-context';
 import { useAPI } from '@/contexts/api-context';
 import { useDatabase } from '@/hooks/use-database';
 import { InvoiceItem } from '@/lib/database';
+import { TaxRateOption, SROSchedule, SROItem } from '@/lib/types';
 import { apiService } from '@/lib/api';
 import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
 
 interface InvoiceItemsProps {
   selectedSeller: string;
@@ -27,8 +26,8 @@ export function InvoiceItems({ selectedSeller, selectedBuyer, invoiceDate, curre
   const { items, addItem, updateItem, removeItem, getTotalAmount, getGrossAmount, getSalesTax } = useInvoice();
   const { hsCodes, transactionTypes, provinces } = useAPI();
   const { sellers, buyers } = useDatabase();
-  const [itemCounter, setItemCounter] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [itemCounter] = useState(0); // Kept for compatibility but not used
 
   const seller = useMemo(() => 
     sellers.find(s => s.id === selectedSeller), 
@@ -42,7 +41,7 @@ export function InvoiceItems({ selectedSeller, selectedBuyer, invoiceDate, curre
 
   const [updateTimeouts, setUpdateTimeouts] = useState<Record<string, NodeJS.Timeout>>({});
 
-  const clearTimeout = useCallback((key: string) => {
+  const clearUpdateTimeout = useCallback((key: string) => {
     if (updateTimeouts[key]) {
       clearTimeout(updateTimeouts[key]);
       setUpdateTimeouts(prev => {
@@ -53,57 +52,83 @@ export function InvoiceItems({ selectedSeller, selectedBuyer, invoiceDate, curre
     }
   }, [updateTimeouts]);
 
-  const debouncedApiCall = useCallback((key: string, callback: () => Promise<void>, delay = 2000) => {
-    clearTimeout(key);
-    const timeoutId = setTimeout(callback, delay);
-    setUpdateTimeouts(prev => ({ ...prev, [key]: timeoutId }));
-  }, [clearTimeout]);
 
   const addNewItem = useCallback(async () => {
     if (isLoading) return;
     
     setIsLoading(true);
-    const itemId = `item-${itemCounter}`;
-    setItemCounter(prev => prev + 1);
+    const itemId = `item-${Date.now()}-${Math.floor(Math.random() * 1000)}`; // More unique ID generation
     
     try {
       const defaultHsCode = hsCodes.length > 0 ? hsCodes[0] : { hS_CODE: "5904.9000", description: "TEXTILE PRODUCTS" };
       const defaultTransType = transactionTypes.length > 0 ? transactionTypes[0] : { transactioN_TYPE_ID: 18, transactioN_DESC: "Services" };
 
+      // Create a basic item first to show in the UI immediately
       const newItem: InvoiceItem = {
         id: itemId,
         hsCode: defaultHsCode.hS_CODE,
         description: defaultHsCode.description,
         serviceTypeId: defaultTransType.transactioN_TYPE_ID,
         saleType: defaultTransType.transactioN_DESC,
-        uom: "",
+        uom: "PCS", // Default UoM
         quantity: 1,
-        unitPrice: 100,
-        taxRate: 0, // Default tax rate is 0%
+        unitPrice: 0, // Start with 0 to avoid validation issues
+        taxRate: 0,
         rateId: undefined,
         sroSchedule: undefined,
         sroItem: undefined,
         annexureId: 3,
-        uomOptions: [],
+        uomOptions: ["PCS", "KG", "MTR", "SET", "LTR"], // Common defaults
         taxRateOptions: [],
         sroScheduleOptions: [],
         sroItemOptions: [],
       };
 
+      // Add the item immediately for better UX
+      addItem(newItem);
+      
+      // Then fetch additional data in the background
       if (seller && newItem.hsCode) {
         try {
           apiService.setToken(seller.sandboxToken);
-          newItem.uomOptions = await apiService.fetchUoMOptions(newItem.hsCode, 3);
-          newItem.uom = newItem.uomOptions.length > 0 ? newItem.uomOptions[0] : "";
+          
+          // Fetch UoM options
+          const uomOptions = await apiService.fetchUoMOptions(newItem.hsCode, 3);
+          const uom = uomOptions.length > 0 ? uomOptions[0] : "PCS";
+          
+          // Update the item with fetched data
+          updateItem(itemId, { 
+            uomOptions,
+            uom,
+            taxRateOptions: [],
+            sroScheduleOptions: [],
+            sroItemOptions: []
+          });
+          
+          // If we have a buyer and invoice date, try to load tax rates
+          if (buyer && invoiceDate) {
+            const formattedDate = apiService.formatDateForAPI(invoiceDate, "DD-MMM-YYYY");
+            const buyerProvince = provinces.find(p => p.stateProvinceDesc === buyer.province);
+            const originationSupplier = buyerProvince ? buyerProvince.stateProvinceCode : 1;
+            
+            const taxRateOptions = await apiService.fetchTaxRateOptions(
+              newItem.serviceTypeId, 
+              originationSupplier.toString(), 
+              formattedDate
+            );
+            
+            updateItem(itemId, { taxRateOptions });
+          }
+          
+          toast.success('Item added successfully');
         } catch (error) {
-          console.error('Failed to fetch UoM options:', error);
-          newItem.uomOptions = [];
-          newItem.uom = "PCS";
+          console.error('Error fetching item details:', error);
+          // Keep the item but show a warning
+          toast.warning('Item added, but some details could not be loaded');
         }
+      } else {
+        toast.success('Item added successfully');
       }
-
-      addItem(newItem);
-      toast.success('Item added successfully');
     } catch (error) {
       console.error('Error adding item:', error);
       toast.error('Failed to add item');
@@ -116,23 +141,32 @@ export function InvoiceItems({ selectedSeller, selectedBuyer, invoiceDate, curre
     const item = items.find(item => item.id === itemId);
     if (!item || !seller) return;
 
-    const updates: Partial<InvoiceItem> = { [field]: value };
-
-    if (['quantity', 'unitPrice', 'description'].includes(field)) {
+    // For immediate updates that don't require API calls
+    if (['quantity', 'unitPrice', 'description', 'uom'].includes(field)) {
       const numValue = ['quantity', 'unitPrice'].includes(field) ? Number(value) : value;
-      updateItem(itemId, { [field]: numValue });
+      updateItem(itemId, { [field]: numValue } as Partial<InvoiceItem>);
       return;
     }
 
     const updateKey = `${itemId}-${field}`;
     
-    debouncedApiCall(updateKey, async () => {
+    // Clear any pending updates for this item to avoid race conditions
+    clearTimeout(updateKey);
+    
+    // Create a copy of the current item to work with
+    const currentItem = { ...item };
+    const updates: Partial<InvoiceItem> = { [field]: value };
+    
+    // Set a new timeout for the update
+    const timeoutId = setTimeout(async () => {
       try {
         apiService.setToken(seller.sandboxToken);
 
         if (field === 'hsCode') {
           const selectedHsCode = hsCodes.find(hs => hs.hS_CODE === value);
-          updates.description = selectedHsCode?.description || item.description;
+          if (selectedHsCode) {
+            updates.description = selectedHsCode.description;
+          }
           updates.uomOptions = await apiService.fetchUoMOptions(value, 3);
           updates.uom = updates.uomOptions.length > 0 ? updates.uomOptions[0] : "";
           updates.taxRateOptions = [];
@@ -146,7 +180,9 @@ export function InvoiceItems({ selectedSeller, selectedBuyer, invoiceDate, curre
         } 
         else if (field === 'serviceTypeId') {
           const selectedTransType = transactionTypes.find(t => t.transactioN_TYPE_ID === Number(value));
-          updates.saleType = selectedTransType?.transactioN_DESC || item.saleType;
+          if (selectedTransType) {
+            updates.saleType = selectedTransType.transactioN_DESC;
+          }
 
           if (buyer && invoiceDate) {
             const formattedDate = apiService.formatDateForAPI(invoiceDate, "DD-MMM-YYYY");
@@ -164,142 +200,169 @@ export function InvoiceItems({ selectedSeller, selectedBuyer, invoiceDate, curre
           }
         } 
         else if (field === 'taxRate') {
-          const selectedTaxRate = item.taxRateOptions?.find(rate => rate.ratE_VALUE === Number(value));
-          updates.rateId = selectedTaxRate?.ratE_ID;
+          const selectedTaxRate = (currentItem.taxRateOptions as TaxRateOption[])?.find(rate => rate.ratE_VALUE === Number(value));
+          if (selectedTaxRate) {
+            updates.rateId = selectedTaxRate.ratE_ID;
+          }
 
           if (updates.rateId && buyer && invoiceDate) {
             const formattedDate = apiService.formatDateForAPI(invoiceDate, "DD-MMM-YYYY");
             const buyerProvince = provinces.find(p => p.stateProvinceDesc === buyer.province);
             const provinceCode = buyerProvince ? buyerProvince.stateProvinceCode : 1;
             
-            updates.sroScheduleOptions = await apiService.fetchSROSchedules(updates.rateId, formattedDate, provinceCode);
-            updates.sroSchedule = updates.sroScheduleOptions.length > 0 ? updates.sroScheduleOptions[0].srO_ID : undefined;
+            const sroSchedules = await apiService.fetchSROSchedules(updates.rateId!, formattedDate, provinceCode) as SROSchedule[];
+            updates.sroScheduleOptions = sroSchedules;
+            updates.sroSchedule = sroSchedules.length > 0 ? sroSchedules[0].srO_ID : undefined;
             
             if (updates.sroSchedule) {
               const formattedDateISO = apiService.formatDateForAPI(invoiceDate, "YYYY-MM-DD");
-              updates.sroItemOptions = await apiService.fetchSROItems(updates.sroSchedule, formattedDateISO);
-              updates.sroItem = updates.sroItemOptions.length > 0 ? updates.sroItemOptions[0].srO_ITEM_ID : undefined;
+              const sroItems = await apiService.fetchSROItems(updates.sroSchedule, formattedDateISO) as SROItem[];
+              updates.sroItemOptions = sroItems;
+              updates.sroItem = sroItems.length > 0 ? sroItems[0].srO_ITEM_ID : undefined;
             }
             toast.success('Tax rate selected, SRO options loaded');
           }
-        } 
-        else if (field === 'sroSchedule') {
-          if (invoiceDate) {
-            const formattedDate = apiService.formatDateForAPI(invoiceDate, "YYYY-MM-DD");
-            updates.sroItemOptions = await apiService.fetchSROItems(Number(value), formattedDate);
-            updates.sroItem = updates.sroItemOptions.length > 0 ? updates.sroItemOptions[0].srO_ITEM_ID : undefined;
-            toast.success('SRO Schedule selected, SRO Items loaded');
+        
+
+        if (updates.rateId && buyer && invoiceDate) {
+          const formattedDate = apiService.formatDateForAPI(invoiceDate, "DD-MMM-YYYY");
+          const buyerProvince = provinces.find(p => p.stateProvinceDesc === buyer.province);
+          const provinceCode = buyerProvince ? buyerProvince.stateProvinceCode : 1;
+          
+          const sroSchedules = await apiService.fetchSROSchedules(updates.rateId!, formattedDate, provinceCode) as SROSchedule[];
+          updates.sroScheduleOptions = sroSchedules;
+          updates.sroSchedule = sroSchedules.length > 0 ? sroSchedules[0].srO_ID : undefined;
+          
+          if (updates.sroSchedule) {
+            const formattedDateISO = apiService.formatDateForAPI(invoiceDate, "YYYY-MM-DD");
+            const sroItems = await apiService.fetchSROItems(updates.sroSchedule, formattedDateISO) as SROItem[];
+            updates.sroItemOptions = sroItems;
+            updates.sroItem = sroItems.length > 0 ? sroItems[0].srO_ITEM_ID : undefined;
           }
+          toast.success('Tax rate selected, SRO options loaded');
         }
-
-        updateItem(itemId, updates);
-      } catch (error) {
-        console.error('Failed to update item:', error);
-        toast.error('Failed to update item');
+      } 
+      else if (field === 'sroSchedule') {
+        if (invoiceDate) {
+          const formattedDate = apiService.formatDateForAPI(invoiceDate, "YYYY-MM-DD");
+          updates.sroItemOptions = await apiService.fetchSROItems(Number(value), formattedDate);
+          const sroItemData = (item.sroItemOptions as SROItem[] | undefined)?.find(si => si.srO_ITEM_ID === item.sroItem);
+          updates.sroItem = sroItemData?.srO_ITEM_ID;
+          toast.success('SRO Schedule selected, SRO Items loaded');
+        }
       }
-    });
-  }, [items, seller, buyer, invoiceDate, hsCodes, transactionTypes, provinces, updateItem, debouncedApiCall]);
 
-  useEffect(() => {
-    if (items.length === 0 && hsCodes.length > 0 && transactionTypes.length > 0 && !isLoading) {
-      addNewItem();
+      // Merge updates with current item state to ensure we don't lose any properties
+      updateItem(itemId, { ...updates });
+    } catch (error) {
+      console.error('Failed to update item:', error);
+      toast.error(`Failed to update item: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-  }, [hsCodes.length, transactionTypes.length]);
+  }, 500); // Reduced debounce time for better responsiveness
 
-  useEffect(() => {
-    return () => {
-      Object.values(updateTimeouts).forEach(timeout => clearTimeout(timeout));
-    };
-  }, [updateTimeouts]);
+  // Store the timeout ID so we can clear it if needed
+  setUpdateTimeouts(prev => ({ ...prev, [updateKey]: timeoutId }));
+}, [items, seller, buyer, invoiceDate, hsCodes, transactionTypes, provinces, updateItem, clearUpdateTimeout, setUpdateTimeouts]);
 
-  // Prepare options for searchable selects
-  const hsCodeOptions = useMemo(() => 
-    hsCodes.slice(0, 100).map(hs => ({
-      value: hs.hS_CODE,
-      label: hs.hS_CODE,
-      description: hs.description
-    })), [hsCodes]
-  );
+useEffect(() => {
+  if (items.length === 0 && hsCodes.length > 0 && transactionTypes.length > 0 && !isLoading) {
+    addNewItem();
+  }
+}, [hsCodes.length, transactionTypes.length]);
 
-  const transactionTypeOptions = useMemo(() => 
-    transactionTypes.map(t => ({
-      value: t.transactioN_TYPE_ID.toString(),
-      label: t.transactioN_DESC,
-      description: `ID: ${t.transactioN_TYPE_ID}`
-    })), [transactionTypes]
-  );
+useEffect(() => {
+  return () => {
+    Object.values(updateTimeouts).forEach(timeout => clearTimeout(timeout));
+  };
+}, [updateTimeouts]);
 
-  return (
-    <Card className="border-l-4 border-l-blue-500 shadow-lg">
-      <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950 dark:to-indigo-950">
-        <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2 text-blue-700 dark:text-blue-300">
-            <Package className="h-5 w-5" />
-            Invoice Items
-          </CardTitle>
-          <Button 
-            onClick={addNewItem} 
-            size="sm" 
-            className="bg-green-600 hover:bg-green-700 text-white shadow-md hover:shadow-lg transition-all duration-200"
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Plus className="h-4 w-4 mr-2" />
-            )}
-            {isLoading ? 'Adding...' : 'Add Item'}
-          </Button>
+// Prepare options for searchable selects
+const hsCodeOptions = useMemo(() => 
+  hsCodes.map(hs => ({
+    value: hs.hS_CODE,
+    label: hs.hS_CODE,
+    description: hs.description
+  })), [hsCodes]
+);
+
+const transactionTypeOptions = useMemo(() => 
+  transactionTypes.map(t => ({
+    value: t.transactioN_TYPE_ID.toString(),
+    label: t.transactioN_DESC,
+    description: `ID: ${t.transactioN_TYPE_ID}`
+  })), [transactionTypes]
+);
+
+return (
+  <Card className="border-l-4 border-l-blue-500 shadow-lg">
+    <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950 dark:to-indigo-950">
+      <div className="flex items-center justify-between">
+        <CardTitle className="flex items-center gap-2 text-blue-700 dark:text-blue-300">
+          <Package className="h-5 w-5" />
+          Invoice Items
+        </CardTitle>
+        <Button 
+          onClick={addNewItem} 
+          size="sm" 
+          className="bg-green-600 hover:bg-green-700 text-white shadow-md hover:shadow-lg transition-all duration-200"
+          disabled={isLoading}
+        >
+          {isLoading ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <Plus className="h-4 w-4 mr-2" />
+          )}
+          {isLoading ? 'Adding...' : 'Add Item'}
+        </Button>
+      </div>
+    </CardHeader>
+    
+    <CardContent className="p-6">
+      {items.length === 0 ? (
+        <div className="text-center py-8 text-muted-foreground">
+          <Package className="h-12 w-12 mx-auto mb-4 opacity-50" />
+          <p>No items added yet</p>
+          <p className="text-sm">Click "Add Item" to get started</p>
         </div>
-      </CardHeader>
-      
-      <CardContent className="p-6">
-        {items.length === 0 ? (
-          <div className="text-center py-8 text-muted-foreground">
-            <Package className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>No items added yet</p>
-            <p className="text-sm">Click "Add Item" to get started</p>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {items.map((item, index) => (
-              <ItemRow
-                key={item.id}
-                item={item}
-                index={index}
-                currency={currency}
-                hsCodeOptions={hsCodeOptions}
-                transactionTypeOptions={transactionTypeOptions}
-                onUpdate={handleItemUpdate}
-                onRemove={() => removeItem(item.id)}
-              />
-            ))}
-            
-            <Separator className="my-6" />
-            
-            <div className="flex justify-end">
-              <div className="space-y-2 text-right bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950 dark:to-purple-950 p-4 rounded-lg border shadow-sm">
-                <div className="flex justify-between gap-8">
-                  <span className="text-blue-700 dark:text-blue-300">Gross Amount:</span>
-                  <span className="font-medium text-blue-800 dark:text-blue-200">{currency} {getGrossAmount().toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between gap-8">
-                  <span className="text-purple-700 dark:text-purple-300">Sales Tax:</span>
-                  <span className="font-medium text-purple-800 dark:text-purple-200">{currency} {getSalesTax().toFixed(2)}</span>
-                </div>
-                <Separator />
-                <div className="flex justify-between gap-8 text-lg font-bold">
-                  <span className="text-green-700 dark:text-green-300">Total Amount:</span>
-                  <span className="text-green-800 dark:text-green-200">{currency} {getTotalAmount().toFixed(2)}</span>
-                </div>
+      ) : (
+        <div className="space-y-6">
+          {items.map((item, index) => (
+            <ItemRow
+              key={item.id}
+              item={item}
+              index={index}
+              currency={currency}
+              hsCodeOptions={hsCodeOptions}
+              transactionTypeOptions={transactionTypeOptions}
+              onUpdate={handleItemUpdate}
+              onRemove={() => removeItem(item.id)}
+            />
+          ))}
+          
+          <Separator className="my-6" />
+          
+          <div className="flex justify-end">
+            <div className="space-y-2 text-right bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950 dark:to-purple-950 p-4 rounded-lg border shadow-sm">
+              <div className="flex justify-between gap-8">
+                <span className="text-blue-700 dark:text-blue-300">Gross Amount:</span>
+                <span className="font-medium text-blue-800 dark:text-blue-200">{currency} {getGrossAmount().toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between gap-8">
+                <span className="text-purple-700 dark:text-purple-300">Sales Tax:</span>
+                <span className="font-medium text-purple-800 dark:text-purple-200">{currency} {getSalesTax().toFixed(2)}</span>
+              </div>
+              <Separator />
+              <div className="flex justify-between gap-8 text-lg font-bold">
+                <span className="text-green-700 dark:text-green-300">Total Amount:</span>
+                <span className="text-green-800 dark:text-green-200">{currency} {getTotalAmount().toFixed(2)}</span>
               </div>
             </div>
           </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
+        </div>
+      )}
+    </CardContent>
+  </Card>
+);
 
 interface ItemRowProps {
   item: InvoiceItem;
@@ -318,27 +381,27 @@ function ItemRow({ item, index, currency, hsCodeOptions, transactionTypeOptions,
     return baseValue + taxAmount;
   }, [item.quantity, item.unitPrice, item.taxRate]);
 
-  // Prepare tax rate options
+  // Prepare tax rate options with type assertion
   const taxRateOptions = useMemo(() => 
-    (item.taxRateOptions || []).map(rate => ({
+    ((item.taxRateOptions as TaxRateOption[]) || []).map((rate) => ({
       value: rate.ratE_VALUE.toString(),
       label: rate.ratE_DESC,
       description: `Rate ID: ${rate.ratE_ID}`
     })), [item.taxRateOptions]
   );
 
-  // Prepare SRO schedule options
+  // Prepare SRO schedule options with type assertion
   const sroScheduleOptions = useMemo(() => 
-    (item.sroScheduleOptions || []).map(sro => ({
+    ((item.sroScheduleOptions as SROSchedule[]) || []).map((sro) => ({
       value: sro.srO_ID.toString(),
       label: sro.srO_DESC,
       description: `SRO ID: ${sro.srO_ID}`
     })), [item.sroScheduleOptions]
   );
 
-  // Prepare SRO item options
+  // Prepare SRO item options with type assertion
   const sroItemOptions = useMemo(() => 
-    (item.sroItemOptions || []).map(sroItem => ({
+    ((item.sroItemOptions as SROItem[]) || []).map((sroItem) => ({
       value: sroItem.srO_ITEM_ID.toString(),
       label: sroItem.srO_ITEM_DESC,
       description: `Item ID: ${sroItem.srO_ITEM_ID}`
@@ -510,4 +573,4 @@ function ItemRow({ item, index, currency, hsCodeOptions, transactionTypeOptions,
       </div>
     </div>
   );
-}
+}}

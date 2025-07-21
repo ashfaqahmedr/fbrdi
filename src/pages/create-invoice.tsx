@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -35,6 +35,24 @@ export function CreateInvoice({ editingInvoice }: CreateInvoiceProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [jsonDialogOpen, setJsonDialogOpen] = useState(false);
   const [invoicePayload, setInvoicePayload] = useState<Record<string, unknown>>({});
+  const invoiceTypeRef = useRef<HTMLButtonElement>(null);
+  const lastItemRef = useRef<HTMLDivElement>(null);
+
+  // Focus management
+  useEffect(() => {
+    if (editingInvoice) {
+      // In edit mode, focus the last line item after items are loaded
+      if (items.length > 0 && lastItemRef.current) {
+        const input = lastItemRef.current.querySelector('input, button, select');
+        if (input) {
+          (input as HTMLElement).focus();
+        }
+      }
+    } else if (invoiceTypeRef.current) {
+      // In create mode, focus the invoice type field
+      invoiceTypeRef.current.focus();
+    }
+  }, [editingInvoice, items.length]);
 
   // Load editing invoice data
   useEffect(() => {
@@ -474,7 +492,10 @@ export function CreateInvoice({ editingInvoice }: CreateInvoiceProps) {
                 <Label htmlFor="scenarioId" className="text-orange-700 dark:text-orange-300 font-medium">Scenario ID</Label>
                 <Select value={scenarioId} onValueChange={setScenarioId}>
                   <SelectTrigger className="border-orange-200 focus:border-orange-500 hover:border-orange-300 transition-colors">
-                    <SelectValue placeholder="Select scenario" />
+                    <SelectValue 
+                      ref={lastItemRef}
+                      placeholder="Select scenario" 
+                    />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="SN001">SN001 - Standard Rate to Registered</SelectItem>
